@@ -4,7 +4,7 @@ const Log = require("./backend/logging_middleware/logging");
 
 const app = express();
 
-// Enable CORS
+
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -17,19 +17,35 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Routes
+
 const routes = require("./backend/routes/testRouters");
 app.use("/api", routes);
 
-// Health check endpoint
+
+const notificationRoutes = require("./backend/routes/notificationRoutes");
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/notification", notificationRoutes);
+app.use("/notifications", notificationRoutes);
+
+
 app.get("/", (req, res) => {
-    // Send response immediately without waiting for logging
+    
     res.send("Backend service running");
-    // Log in background after response
+    
     Log("backend", "debug", "route", "Health check endpoint accessed");
 });
 
-// Global error handler
+
+app.use((req, res) => {
+    Log("backend", "warn", "route", `Route not found: ${req.method} ${req.originalUrl}`);
+
+    res.status(404).json({
+        success: false,
+        message: `Route not found: ${req.method} ${req.originalUrl}`
+    });
+});
+
+
 app.use((err, req, res, next) => {
     Log(
         "backend",
@@ -46,24 +62,39 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Handle unhandled rejections and errors BEFORE starting server
+
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
-    // Don't exit - let the server keep running
+    process.exit(1);
 });
 
-// Port setup
-const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
-    console.log(`Server successfully started on port ${PORT}`);
-});
+const PORT = process.env.PORT || 3001;
 
-// Keep the process alive
-setInterval(() => {
-    // This keeps the event loop active
-}, 1000);
+function startServer() {
+    const server = app.listen(PORT, () => {
+        console.log(`Server successfully started on port ${PORT}`);
+    });
+
+    server.on("error", (error) => {
+        if (error.code === "EADDRINUSE") {
+            console.error(`Port ${PORT} is already in use`);
+        } else {
+            console.error("Failed to start server:", error.message);
+        }
+
+        process.exit(1);
+    });
+
+    return server;
+}
+
+if (require.main === module) {
+    startServer();
+}
+
+module.exports = { app, startServer };
